@@ -110,6 +110,21 @@ of all country codes.)
 command). This is required for the encryption to work efficiently and for getting updates to groups, expiration timer
 and other features.
 
+## AI Auto-Response (NEW)
+
+signal-cli now supports AI-powered auto-responses to incoming messages. This feature allows you to create an intelligent
+bot that can automatically respond to messages using OpenAI, local LLMs, or other OpenAI-compatible APIs.
+
+* Configure auto-response
+
+      signal-cli -a ACCOUNT autoResponse --api-key "YOUR_API_KEY" --enable
+
+* Start daemon with auto-response enabled
+
+      signal-cli -a ACCOUNT daemon --auto-response
+
+See [AUTO_RESPONSE.md](docs/AUTO_RESPONSE.md) for detailed configuration and examples.
+
 ## Storage
 
 The password and cryptographic keys are created when registering and stored in the current users home directory:

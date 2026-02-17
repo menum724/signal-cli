@@ -8,6 +8,9 @@ import org.asamk.signal.DbusConfig;
 import org.asamk.signal.OutputType;
 import org.asamk.signal.ReceiveMessageHandler;
 import org.asamk.signal.Shutdown;
+import org.asamk.signal.autoresponse.AutoResponseConfig;
+import org.asamk.signal.autoresponse.AutoResponseConfigManager;
+import org.asamk.signal.autoresponse.AutoResponseHandler;
 import org.asamk.signal.commands.exceptions.CommandException;
 import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.dbus.DbusHandler;
@@ -83,6 +86,9 @@ public class DaemonCommand implements MultiLocalCommand, LocalCommand {
         subparser.addArgument("--send-read-receipts")
                 .help("Send read receipts for all incoming data messages (in addition to the default delivery receipts)")
                 .action(Arguments.storeTrue());
+        subparser.addArgument("--auto-response")
+                .help("Enable AI-powered auto-response (requires configuration via 'autoResponse' command)")
+                .action(Arguments.storeTrue());
     }
 
     @Override
@@ -101,9 +107,10 @@ public class DaemonCommand implements MultiLocalCommand, LocalCommand {
         final var noReceiveStdOut = Boolean.TRUE.equals(ns.getBoolean("no-receive-stdout"));
         final var receiveMode = ns.<ReceiveMode>get("receive-mode");
         final var receiveConfig = getReceiveConfig(ns);
+        final var enableAutoResponse = Boolean.TRUE.equals(ns.getBoolean("auto-response"));
 
         m.setReceiveConfig(receiveConfig);
-        addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START);
+        addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START, enableAutoResponse);
 
         try (final var daemonHandler = new SingleAccountDaemonHandler(m, receiveMode)) {
             setup(ns, daemonHandler);
@@ -128,13 +135,14 @@ public class DaemonCommand implements MultiLocalCommand, LocalCommand {
         final var noReceiveStdOut = Boolean.TRUE.equals(ns.getBoolean("no-receive-stdout"));
         final var receiveMode = ns.<ReceiveMode>get("receive-mode");
         final var receiveConfig = getReceiveConfig(ns);
+        final var enableAutoResponse = Boolean.TRUE.equals(ns.getBoolean("auto-response"));
         c.getManagers().forEach(m -> {
             m.setReceiveConfig(receiveConfig);
-            addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START);
+            addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START, enableAutoResponse);
         });
         c.addOnManagerAddedHandler(m -> {
             m.setReceiveConfig(receiveConfig);
-            addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START);
+            addDefaultReceiveHandler(m, noReceiveStdOut ? null : outputWriter, receiveMode != ReceiveMode.ON_START, enableAutoResponse);
         });
 
         try (final var daemonHandler = new MultiAccountDaemonHandler(c, receiveMode)) {
@@ -207,13 +215,39 @@ public class DaemonCommand implements MultiLocalCommand, LocalCommand {
         }
     }
 
-    private void addDefaultReceiveHandler(Manager m, OutputWriter outputWriter, final boolean isWeakListener) {
+    private void addDefaultReceiveHandler(Manager m, OutputWriter outputWriter, final boolean isWeakListener, final boolean enableAutoResponse) {
         final var handler = switch (outputWriter) {
             case PlainTextWriter writer -> new ReceiveMessageHandler(m, writer);
             case JsonWriter writer -> new JsonReceiveMessageHandler(m, writer);
             case null -> Manager.ReceiveMessageHandler.EMPTY;
         };
-        m.addReceiveHandler(handler, isWeakListener);
+        
+        // Wrap handler with auto-response if enabled
+        final var finalHandler = enableAutoResponse ? wrapWithAutoResponse(m, handler) : handler;
+        m.addReceiveHandler(finalHandler, isWeakListener);
+    }
+
+    private Manager.ReceiveMessageHandler wrapWithAutoResponse(Manager m, Manager.ReceiveMessageHandler baseHandler) {
+        // Get data path from environment or use default
+        String xdgDataHome = System.getenv("XDG_DATA_HOME");
+        File dataPath;
+        if (xdgDataHome != null && !xdgDataHome.isBlank()) {
+            dataPath = new File(new File(xdgDataHome, "signal-cli"), "data");
+        } else {
+            String userHome = System.getProperty("user.home");
+            dataPath = new File(new File(new File(new File(userHome, ".local"), "share"), "signal-cli"), "data");
+        }
+        
+        var configManager = new AutoResponseConfigManager(dataPath, m.getSelfNumber());
+        var config = configManager.load();
+        
+        if (config.isEnabled()) {
+            logger.info("Auto-response is enabled for {}", m.getSelfNumber());
+            return new AutoResponseHandler(m, config, baseHandler);
+        } else {
+            logger.info("Auto-response is disabled in configuration for {}", m.getSelfNumber());
+            return baseHandler;
+        }
     }
 
     private static abstract class DaemonHandler implements AutoCloseable {
