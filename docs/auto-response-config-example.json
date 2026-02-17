@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "aiProvider": "openai",
+  "apiEndpoint": "https://api.openai.com/v1/chat/completions",
+  "apiKey": "sk-your-api-key-here",
+  "model": "gpt-3.5-turbo",
+  "systemPrompt": "You are a helpful AI assistant responding to messages on Signal. Be concise, friendly, and helpful. Keep responses brief and conversational. You are helping the account owner by responding to their messages when they are unavailable.",
+  "allowedSenders": [],
+  "blockedSenders": [],
+  "respondToGroups": false,
+  "maxResponseLength": 500,
+  "fallbackMessage": "Thanks for your message. I'll get back to you soon!",
+  "useFallbackOnError": true,
+  "sendTypingIndicator": true,
+  "typingDelaySeconds": 2,
+  "sendGreetingOnFirstMessage": true,
+  "greetingMessage": "👋 Hi! I'm an AI assistant managing messages for this account. How can I help you?",
+  "identifyAsBot": true,
+  "botSignature": "\n\n🤖 (AI Assistant)",
+  "useNaturalDelay": true,
+  "minDelaySeconds": 1,
+  "maxDelaySeconds": 5
+}
